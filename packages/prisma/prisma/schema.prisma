@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────
+
+enum Rol {
+  SUPERVISOR
+  ABOGADO
+  CLIENTE
+}
+
+enum Plan {
+  BASICO
+  PROFESIONAL
+  ESTUDIO
+}
+
+enum TipoCaso {
+  LABORAL
+  FAMILIA
+  CIVIL
+  COMERCIAL
+  ADMINISTRATIVO
+}
+
+enum EtapaCaso {
+  INGRESO
+  DOCUMENTACION
+  TRAMITACION
+  AUDIENCIA
+  RESOLUCION
+  CERRADO
+}
+
+enum TipoAccion {
+  ESCRITO
+  AUDIENCIA
+  LLAMADA
+  DOCUMENTO
+  RESOLUCION
+  OTRO
+}
+
+enum EstadoCuota {
+  PENDIENTE
+  PAGADA
+  VENCIDA
+}
+
+// ─── TENANT PRINCIPAL ────────────────────────────────
+
+model Estudio {
+  id        String   @id @default(cuid())
+  nombre    String
+  rut       String   @unique
+  plan      Plan     @default(BASICO)
+  creadoEn  DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  usuarios  Usuario[]
+  casos     Caso[]
+
+  @@index([rut])
+}
+
+// ─── USUARIOS ─────────────────────────────────────────
+
+model Usuario {
+  id           String   @id @default(cuid())
+  estudioId    String
+  nombre       String
+  email        String
+  passwordHash String?  // null for CLIENTE (token access)
+  rol          Rol
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  estudio        Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  casosAsignados Caso[]   @relation("AbogadoCaso")
+  casosCliente   Caso[]   @relation("ClienteCaso")
+  acciones       Accion[] @relation("AccionRegistradaPor")
+
+  @@unique([email, estudioId])
+  @@index([estudioId])
+  @@index([email])
+}
+
+// ─── CASOS ────────────────────────────────────────────
+
+model Caso {
+  id           String     @id @default(cuid())
+  estudioId    String
+  titulo       String
+  descripcion  String?
+  tipoCaso     TipoCaso
+  etapa        EtapaCaso  @default(INGRESO)
+  rol          String?    // ROL del tribunal (ej: "O-2987-2026")
+  abogadoId    String
+  clienteId    String
+  tokenCliente String     @unique @default(cuid())
+  creadoEn     DateTime   @default(now())
+  actualizadoEn DateTime  @updatedAt
+  ultimaAccion DateTime?
+
+  estudio    Estudio     @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  abogado    Usuario     @relation("AbogadoCaso", fields: [abogadoId], references: [id])
+  cliente    Usuario     @relation("ClienteCaso", fields: [clienteId], references: [id])
+  acciones   Accion[]
+  documentos Documento[]
+  cuotas     Cuota[]
+
+  @@index([estudioId])
+  @@index([abogadoId])
+  @@index([clienteId])
+  @@index([tokenCliente])
+  @@index([etapa])
+}
+
+// ─── ACCIONES ─────────────────────────────────────────
+
+model Accion {
+  id                  String     @id @default(cuid())
+  estudioId           String
+  casoId              String
+  tipo                TipoAccion
+  descripcionTecnica  String     // Lo que escribe el abogado
+  descripcionCliente  String     // Traducción para el cliente (IA)
+  proximoPaso         String?
+  visibleCliente      Boolean    @default(true)
+  registradoPorId     String
+  creadoEn            DateTime   @default(now())
+
+  caso          Caso    @relation(fields: [casoId], references: [id], onDelete: Cascade)
+  registradoPor Usuario @relation("AccionRegistradaPor", fields: [registradoPorId], references: [id])
+
+  @@index([estudioId])
+  @@index([casoId])
+  @@index([creadoEn])
+}
+
+// ─── DOCUMENTOS ───────────────────────────────────────
+
+model Documento {
+  id          String   @id @default(cuid())
+  estudioId   String
+  casoId      String
+  nombre      String
+  url         String
+  tipoMime    String?
+  tamanioBytes Int?
+  subidoPorId String
+  creadoEn    DateTime @default(now())
+
+  caso Caso @relation(fields: [casoId], references: [id], onDelete: Cascade)
+
+  @@index([estudioId])
+  @@index([casoId])
+}
+
+// ─── CUOTAS ───────────────────────────────────────────
+
+model Cuota {
+  id          String      @id @default(cuid())
+  estudioId   String
+  casoId      String
+  monto       Int         // En pesos chilenos (sin decimales)
+  vencimiento DateTime
+  estado      EstadoCuota @default(PENDIENTE)
+  pagadoEn    DateTime?
+  creadoEn    DateTime    @default(now())
+  actualizadoEn DateTime  @updatedAt
+
+  caso Caso @relation(fields: [casoId], references: [id], onDelete: Cascade)
+
+  @@index([estudioId])
+  @@index([casoId])
+  @@index([estado])
+  @@index([vencimiento])
+}
