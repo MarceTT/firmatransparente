@@ -8,6 +8,7 @@
     "lint": "turbo lint",
     "db:push": "pnpm --filter @ft/prisma db:push",
     "db:migrate": "pnpm --filter @ft/prisma migrate:dev",
+    "db:seed": "pnpm --filter @ft/prisma db:seed",
     "db:studio": "pnpm --filter @ft/prisma studio"
   },
   "devDependencies": {

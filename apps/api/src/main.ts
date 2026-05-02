@@ -1,9 +1,18 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Global auth guard
+  const reflector = app.get(Reflector);
+  app.useGlobalGuards(new JwtAuthGuard(reflector));
+
+  // Global tenant interceptor (runs AFTER guards)
+  app.useGlobalInterceptors(new TenantInterceptor());
 
   // Global validation pipe
   app.useGlobalPipes(
